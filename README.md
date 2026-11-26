@@ -9,9 +9,11 @@
 - วิดีโอจากกล้องไม่ถูกอัปโหลดหรือจัดเก็บโดย GitHub Pages
 - ระบบนี้ยังไม่มีการตรวจจับการปลอมแปลงใบหน้า (liveness / anti-spoof) ครูต้องตรวจทานรายชื่อก่อนบันทึก
 
-## การเผยแพร่
+## เปิดใช้ GitHub Pages ครั้งแรก
 
-ไฟล์ `index.html` อยู่ที่ root ของ branch `main` ส่วน GitHub Actions workflow ที่ `.github/workflows/deploy-pages.yml` จะเผยแพร่เว็บไซต์เมื่อมีการ push ไปยัง `main` หรือเมื่อสั่งรันด้วยตนเอง
+ไปที่ Settings > Pages ของ Repository นี้ แล้วตั้งค่า Build and deployment > Source เป็น **GitHub Actions** จากนั้น Save หากมีปุ่มแสดง ขั้นตอนนี้จำเป็นครั้งเดียว เพราะ GitHub Actions ที่เชื่อมต่ออยู่ไม่มีสิทธิ์เปิด Pages site ครั้งแรกแทนเจ้าของ Repository ได้
+
+หลังเปิด Pages แล้ว ให้รัน workflow **Deploy face scanner to GitHub Pages** จากแท็บ Actions หรือแจ้งผู้ช่วยเพื่อสั่งรันและตรวจสอบให้
 
 ## เชื่อมกับเว็บแอปหลัก
 
