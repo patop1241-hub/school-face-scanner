@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#101827">
+<title>ระบบตรวจใบหน้า LIVE · โรงเรียน</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121e31;--line:#293a54;--text:#e6eefb;--muted:#a6b5ca;--blue:#60a5fa;--green:#4ade80;--red:#f87171;--amber:#fbbf24}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 12% 0,#172c4c 0,transparent 42%),var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1160px;margin:auto;padding:18px}.top{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}.title{font-size:clamp(20px,3vw,28px);font-weight:800}.sub{color:var(--muted);font-size:13px}.pill{border:1px solid #24533b;background:#0c2a20;color:var(--green);border-radius:999px;padding:6px 11px;font-size:12px;font-weight:700}
+.grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,.8fr);gap:16px}.panel{background:linear-gradient(145deg,rgba(23,39,62,.97),rgba(16,27,44,.98));border:1px solid var(--line);border-radius:18px;padding:15px;box-shadow:0 18px 45px #0003}.camera{position:relative;overflow:hidden;background:#030712;border:2px solid #334155;border-radius:14px;aspect-ratio:4/3;display:grid;place-items:center}.camera video,.camera canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}.camera canvas{pointer-events:none}.camera-placeholder{padding:22px;text-align:center;color:var(--muted)}.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}.btn,select{border:1px solid #415570;background:#1e3350;color:#f8fbff;border-radius:10px;padding:10px 13px;font:inherit}.btn{cursor:pointer;font-weight:700}.btn.primary{background:#1d4ed8;border-color:#3b82f6}.btn.danger{background:#7f1d1d;border-color:#b91c1c}.btn:disabled{opacity:.5;cursor:not-allowed}.status{margin:0 0 12px;padding:11px 12px;border:1px solid #3a4d65;border-radius:11px;background:#101827;color:#cbd5e1}.status.success{border-color:#166534;background:#052e1a;color:#bbf7d0}.status.warn{border-color:#92400e;background:#422006;color:#fde68a}.status.error{border-color:#991b1b;background:#450a0a;color:#fecaca}.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}.stat{background:#0b1526;border:1px solid #283950;border-radius:12px;padding:11px}.stat b{display:block;font-size:25px}.stat span{font-size:12px;color:var(--muted)}.list{display:grid;gap:7px;max-height:420px;overflow:auto}.student{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 10px;border-radius:10px;background:#0b1526;border:1px solid #283950}.student small{color:var(--muted)}.student .ok{color:var(--green);font-weight:800}.note{margin-top:14px;color:#fcd9a8;background:#3a260f;border:1px solid #80551a;border-radius:12px;padding:12px;font-size:12px}.hidden{display:none!important}.camera-tag{position:absolute;left:10px;top:10px;z-index:2;background:#020617c9;border:1px solid #64748b;color:#e2e8f0;border-radius:8px;padding:5px 8px;font-size:11px}
+@media(max-width:820px){.grid{grid-template-columns:1fr}.wrap{padding:12px}.list{max-height:240px}.panel{padding:12px}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div><div class="title">ระบบตรวจใบหน้า LIVE</div><div class="sub">หน้าต่างกล้องสำหรับระบบบันทึกการมาเรียน · ประมวลผลภายในเบราว์เซอร์</div></div><span id="livePill" class="pill">รอเชื่อมต่อระบบหลัก</span></div>
+  <div class="grid">
+    <section class="panel">
+      <div id="status" class="status">กรุณาเปิดหน้านี้จากเมนู “เช็คชื่อด้วยใบหน้า” ในบัญชีครู ระบบจะส่งรายชื่ออ้างอิงมาให้โดยอัตโนมัติ</div>
+      <div class="camera" id="cameraBox">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+        <div id="cameraPlaceholder" class="camera-placeholder">ยังไม่ได้เปิดกล้อง<br><small>อนุญาตการใช้งานกล้องเมื่อเบราว์เซอร์ถาม</small></div>
+        <span id="cameraTag" class="camera-tag hidden">LIVE · FACE DETECTION</span>
+      </div>
+      <div class="controls">
+        <select id="cameraSelect" aria-label="เลือกกล้อง" disabled><option value="">กล้องเริ่มต้นของอุปกรณ์</option></select>
+        <button id="switchCameraBtn" class="btn" type="button" disabled>เปลี่ยนกล้อง</button>
+        <button id="stopBtn" class="btn danger" type="button" disabled>หยุดกล้อง</button>
+      </div>
+      <div class="sub" style="margin-top:10px">วางใบหน้าไว้ในกรอบและมองกล้องตามปกติ ระบบจะพิจารณาผลที่ตรงกันต่อเนื่องหลายเฟรมก่อนส่งชื่อกลับไปยังระบบหลัก</div>
+    </section>
+    <aside class="panel">
+      <div class="stats"><div class="stat"><span>ยืนยันใบหน้าแล้ว</span><b id="matchedCount">0</b></div><div class="stat"><span>รูปอ้างอิงที่ใช้ได้</span><b id="referenceCount">0</b></div></div>
+      <div class="sub" style="margin-bottom:8px">ชั้นเรียน: <b id="classLabel">รอข้อมูลจากระบบหลัก</b></div>
+      <div id="recognizedList" class="list"><div class="student"><span>ยังไม่มีรายชื่อที่ตรวจพบ</span><small>—</small></div></div>
+      <div class="note"><b>ข้อมูลส่วนบุคคล:</b> รูปอ้างอิงถูกส่งจากระบบหลักมายังหน้านี้เพื่อเปรียบเทียบในหน่วยความจำของเบราว์เซอร์ วิดีโอและภาพจากกล้องจะไม่ถูกอัปโหลดหรือบันทึกที่ GitHub Pages ระบบหลักได้รับกลับเฉพาะรหัสนักเรียนที่จับคู่ได้</div>
+    </aside>
+  </div>
+  <p class="sub" style="margin:14px 3px 0">หมายเหตุ: ระบบนี้ไม่มีการตรวจจับการปลอมแปลง (liveness/anti-spoof) จึงควรมีครูดูแลและตรวจสอบรายชื่อก่อนกดบันทึกทุกครั้ง</p>
+</div>
+<script>
+(function(){
+'use strict';
+const LIBRARY_URLS=[
+  'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
+  'https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js'
+];
+const MODEL_URLS=[
+  'https://cdn.jsdelivr.net/gh/justadudewho4k/face-api.js@master/weights',
+  'https://raw.githubusercontent.com/justadudewho4k/face-api.js/master/weights'
+];
+const $=id=>document.getElementById(id);
+let sessionToken='';let parentOrigin='';let initReceived=false;let faceApi=null;let matcher=null;let stream=null;let scanning=false;let processing=false;let loopTimer=null;let matched=new Set();let rosterById=new Map();let candidateHits=new Map();let currentDeviceId='';
+
+function setStatus(message,level){const el=$('status');el.textContent=String(message||'');el.className='status'+(level?' '+level:'');}
+function sendParent(type,data){if(!window.opener||window.opener.closed||!parentOrigin||!sessionToken)return;try{window.opener.postMessage(Object.assign({type:type,token:sessionToken},data||{}),parentOrigin);}catch(error){console.warn('postMessage failed',error);}}
+function sendReady(){if(window.opener&&!window.opener.closed){try{window.opener.postMessage({type:'SCHOOL_FACE_READY'},'*');}catch(ignored){}}}
+
+function loadFaceApi(){
+  if(window.faceapi)return Promise.resolve(window.faceapi);
+  return new Promise((resolve,reject)=>{
+    let index=0,lastError=null;
+    const next=()=>{
+      if(window.faceapi){resolve(window.faceapi);return;}
+      if(index>=LIBRARY_URLS.length){reject(lastError||new Error('โหลดไลบรารีตรวจใบหน้าไม่ได้'));return;}
+      const script=document.createElement('script');script.src=LIBRARY_URLS[index++];script.async=true;script.crossOrigin='anonymous';
+      script.onload=()=>window.faceapi?resolve(window.faceapi):(lastError=new Error('โหลดไลบรารีแล้วแต่ไม่พบ faceapi'),next());
+      script.onerror=()=>{lastError=new Error('โหลดไลบรารีไม่สำเร็จ');next();};document.head.appendChild(script);
+    };next();
+  });
+}
+async function loadModels(api){
+  let lastError=null;
+  for(const base of MODEL_URLS){
+    try{
+      await Promise.all([
+        api.nets.tinyFaceDetector.loadFromUri(base),
+        api.nets.faceLandmark68TinyNet.loadFromUri(base),
+        api.nets.faceRecognitionNet.loadFromUri(base)
+      ]);
+      return;
+    }catch(error){lastError=error;}
+  }
+  throw new Error('โหลดโมเดลใบหน้าไม่สำเร็จ: '+String(lastError&&lastError.message||lastError||''));
+}
+function imageFromData(item){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('อ่านรูปอ้างอิงไม่สำเร็จ'));img.src='data:'+(item.MimeType||'image/jpeg')+';base64,'+String(item.ImageData||'');});}
+async function buildMatcher(data){
+  faceApi=await loadFaceApi();setStatus('กำลังโหลดโมเดลตรวจจับใบหน้า...','');await loadModels(faceApi);
+  const students=Array.isArray(data.students)?data.students:[];const labeled=[];let failed=0;
+  for(let i=0;i<students.length;i++){
+    const item=students[i];setStatus('กำลังวิเคราะห์รูปอ้างอิง '+(i+1)+' / '+students.length+' คน...','');
+    try{
+      const img=await imageFromData(item);
+      const result=await faceApi.detectSingleFace(img,new faceApi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:0.2})).withFaceLandmarks(true).withFaceDescriptor();
+      if(result&&result.descriptor){const id=String(item.StudentID||'');labeled.push(new faceApi.LabeledFaceDescriptors(id,[result.descriptor]));rosterById.set(id,{StudentID:id,FullName:String(item.FullName||id),Number:String(item.Number||'')});}
+      else failed++;
+    }catch(error){failed++;}
+  }
+  if(!labeled.length)throw new Error('ไม่พบใบหน้าในรูปอ้างอิง กรุณาตรวจสอบรูปนักเรียนให้เห็นใบหน้าชัดเจน');
+  matcher=new faceApi.FaceMatcher(labeled,Number(data.threshold)||0.48);
+  $('referenceCount').textContent=String(labeled.length);
+  $('classLabel').textContent=String(data.classLabel||'');
+  if(failed)sendParent('SCHOOL_FACE_STATUS',{message:'เตรียมรูปอ้างอิงได้ '+labeled.length+' คน ข้ามรูปที่ไม่ชัด '+failed+' รูป','level':'warn'});
+}
+
+async function enumerateCameras(){
+  const select=$('cameraSelect');if(!navigator.mediaDevices||!navigator.mediaDevices.enumerateDevices)return;
+  try{
+    const devices=(await navigator.mediaDevices.enumerateDevices()).filter(item=>item.kind==='videoinput');
+    select.innerHTML='';devices.forEach((device,index)=>{const option=document.createElement('option');option.value=device.deviceId;option.textContent=device.label||('กล้อง '+(index+1));select.appendChild(option);});
+    if(currentDeviceId)select.value=currentDeviceId;
+    select.disabled=devices.length<=1;$('switchCameraBtn').disabled=devices.length<=1;
+  }catch(error){console.warn('enumerateDevices',error);}
+}
+async function startCamera(deviceId){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('เบราว์เซอร์นี้ไม่รองรับกล้อง LIVE กรุณาเปิดผ่าน Chrome/Edge รุ่นปัจจุบันและใช้ HTTPS');
+  stopCamera(false);
+  const videoOptions=deviceId?{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720}}:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}};
+  stream=await navigator.mediaDevices.getUserMedia({audio:false,video:videoOptions});
+  const video=$('video');video.srcObject=stream;await video.play();
+  const track=stream.getVideoTracks()[0];currentDeviceId=track&&track.getSettings?String(track.getSettings().deviceId||deviceId||''):String(deviceId||'');
+  $('cameraPlaceholder').classList.add('hidden');$('cameraTag').classList.remove('hidden');
+  await enumerateCameras();
+  scanning=true;processing=false;$('stopBtn').disabled=false;setStatus('กล้อง LIVE ทำงานแล้ว · กำลังตรวจใบหน้าอย่างต่อเนื่อง','success');
+  sendParent('SCHOOL_FACE_STATUS',{message:'กล้อง LIVE ทำงานแล้ว กำลังตรวจใบหน้าอย่างต่อเนื่อง','level':'success'});
+  scheduleDetection(350);
+}
+function stopCamera(notify){
+  scanning=false;processing=false;if(loopTimer){clearTimeout(loopTimer);loopTimer=null;}
+  if(stream){stream.getTracks().forEach(track=>{try{track.stop();}catch(ignored){}});stream=null;}
+  const video=$('video');if(video){try{video.pause();}catch(ignored){}video.srcObject=null;}
+  const canvas=$('overlay');if(canvas){const ctx=canvas.getContext('2d');if(ctx)ctx.clearRect(0,0,canvas.width,canvas.height);}
+  $('cameraPlaceholder').classList.remove('hidden');$('cameraTag').classList.add('hidden');
+  $('stopBtn').disabled=true;
+  if(notify){sendParent('SCHOOL_FACE_STOPPED',{});}
+}
+function drawBoxes(detections){
+  const video=$('video'),canvas=$('overlay');if(!video.videoWidth||!video.videoHeight)return;
+  if(canvas.width!==video.videoWidth||canvas.height!==video.videoHeight){canvas.width=video.videoWidth;canvas.height=video.videoHeight;}
+  const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
+  detections.forEach(item=>{
+    const box=item.detection.box;const student=item.student;const color=student?'#4ade80':'#fbbf24';
+    ctx.strokeStyle=color;ctx.lineWidth=Math.max(3,canvas.width/360);ctx.strokeRect(box.x,box.y,box.width,box.height);
+    const label=student?student.FullName:(item.candidate?'กำลังตรวจสอบ':'ไม่พบในทะเบียน');
+    ctx.font='bold '+Math.max(15,canvas.width/55)+'px system-ui';const textWidth=ctx.measureText(label).width;
+    const top=Math.max(0,box.y-Math.max(27,canvas.width/28));ctx.fillStyle=color;ctx.fillRect(box.x,top,Math.min(textWidth+16,box.width+80),Math.max(27,canvas.width/28));
+    ctx.fillStyle='#07111f';ctx.fillText(label,box.x+8,top+Math.max(18,canvas.width/48));
+  });
+}
+function addRecognized(studentId,distance){
+  if(matched.has(studentId))return;
+  matched.add(studentId);const student=rosterById.get(studentId);if(!student)return;
+  const row=document.createElement('div');row.className='student';
+  const name=document.createElement('span');name.textContent=student.FullName;
+  const status=document.createElement('span');status.className='ok';status.textContent='มาเรียนแล้ว';
+  row.append(name,status);$('recognizedList').prepend(row);
+  $('matchedCount').textContent=String(matched.size);
+  sendParent('SCHOOL_FACE_MATCH',{matches:[{StudentID:studentId,FullName:student.FullName,Distance:Number(distance||0)}]});
+  setStatus('ยืนยันใบหน้าตรงกับทะเบียน: '+student.FullName,'success');
+}
+async function detectionTick(){
+  if(!scanning||processing)return;
+  const video=$('video');if(!video||video.readyState<2||!matcher){scheduleDetection(500);return;}
+  processing=true;
+  try{
+    const detections=await faceApi.detectAllFaces(video,new faceApi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:0.42})).withFaceLandmarks(true).withFaceDescriptors();
+    const now=Date.now();const seenThisFrame=new Set();const drawItems=[];
+    detections.forEach(detection=>{
+      const best=matcher.findBestMatch(detection.descriptor);
+      if(best&&best.label!=='unknown'&&Number(best.distance)<=0.48){
+        const id=String(best.label);seenThisFrame.add(id);let progress=candidateHits.get(id)||{hits:0,last:0};
+        progress.hits=(now-progress.last<=1800)?progress.hits+1:1;progress.last=now;candidateHits.set(id,progress);
+        const student=rosterById.get(id);drawItems.push({detection,student:matched.has(id)?student:null,candidate:!matched.has(id)});
+        if(progress.hits>=2&&!matched.has(id))addRecognized(id,best.distance);
+      }else{drawItems.push({detection,student:null,candidate:false});}
+    });
+    for(const [id,progress] of candidateHits.entries()){if(now-progress.last>2200)candidateHits.delete(id);}
+    drawBoxes(drawItems);
+    if(!detections.length){setStatus('กล้อง LIVE พร้อมใช้งาน · ยังไม่พบใบหน้าในกรอบ','');}
+  }catch(error){console.warn('Face detection loop',error);setStatus('ตรวจจับภาพไม่สำเร็จ: '+String(error&&error.message||error),'warn');}
+  finally{processing=false;if(scanning)scheduleDetection(850);}
+}
+function scheduleDetection(delay){if(loopTimer)clearTimeout(loopTimer);if(scanning)loopTimer=setTimeout(detectionTick,delay||850);}
+
+async function initialize(data){
+  if(initReceived)return;initReceived=true;sessionToken=String(data.token||'');
+  if(!sessionToken)throw new Error('ไม่พบรหัสเชื่อมต่อจากระบบหลัก');
+  matched=new Set();rosterById=new Map();candidateHits=new Map();$('matchedCount').textContent='0';$('recognizedList').innerHTML='';
+  $('livePill').textContent='กำลังเตรียมระบบ';$('stopBtn').disabled=true;
+  setStatus('ได้รับข้อมูลจากบัญชีครูแล้ว กำลังเตรียมระบบตรวจใบหน้า...','');
+  await buildMatcher(data);
+  setStatus('เตรียมรูปอ้างอิงเสร็จแล้ว กำลังขออนุญาตใช้กล้อง...','');
+  try{await startCamera('');}
+  catch(error){
+    const message=/NotAllowedError|Permission denied|denied/i.test(String(error&&error.name||'')+' '+String(error&&error.message||''))?'ไม่ได้รับอนุญาตให้ใช้กล้อง กรุณากดไอคอนกล้องในแถบที่อยู่และเลือก Allow':String(error&&error.message||error);
+    $('livePill').textContent='ต้องตรวจสอบกล้อง';setStatus(message,'error');sendParent('SCHOOL_FACE_ERROR',{message:message});throw error;
+  }
+  $('livePill').textContent='กล้อง LIVE ทำงาน';$('stopBtn').disabled=false;$('switchCameraBtn').disabled=false;
+}
+
+window.addEventListener('message',event=>{
+  if(!window.opener||event.source!==window.opener)return;
+  const data=event.data||{};
+  if(data.type==='SCHOOL_FACE_INIT'){
+    parentOrigin=event.origin;
+    initialize(data).catch(error=>{const msg=String(error&&error.message||error);setStatus(msg,'error');sendParent('SCHOOL_FACE_ERROR',{message:msg});});
+  }else if(data.type==='SCHOOL_FACE_STOP'&&String(data.token||'')===sessionToken){
+    stopCamera(false);$('livePill').textContent='หยุดกล้องแล้ว';setStatus('ครูสั่งหยุดกล้องจากระบบหลักแล้ว','warn');sendParent('SCHOOL_FACE_STOPPED',{});
+  }
+});
+
+$('stopBtn').addEventListener('click',()=>{stopCamera(true);$('livePill').textContent='หยุดกล้องแล้ว';setStatus('หยุดกล้องแล้ว สามารถปิดหน้าต่างนี้ได้','warn');});
+$('switchCameraBtn').addEventListener('click',async()=>{const next=$('cameraSelect').value;try{await startCamera(next);}catch(error){setStatus('เปลี่ยนกล้องไม่สำเร็จ: '+String(error&&error.message||error),'error');}});
+$('cameraSelect').addEventListener('change',async()=>{const next=$('cameraSelect').value;if(!next)return;try{await startCamera(next);}catch(error){setStatus('เปิดกล้องที่เลือกไม่สำเร็จ: '+String(error&&error.message||error),'error');}});
+window.addEventListener('beforeunload',()=>{stopCamera(false);sendParent('SCHOOL_FACE_STOPPED',{});});
+
+// แจ้ง READY ซ้ำจนกว่าหน้าระบบหลักจะส่งชุดข้อมูลมา เพื่อรองรับการโหลดหน้า/โมเดลที่ใช้เวลานาน
+sendReady();const readyTimer=setInterval(()=>{if(!initReceived)sendReady();else clearInterval(readyTimer);},500);
+if(!window.opener)setStatus('ต้องเปิดหน้านี้จากบัญชีครูในระบบโรงเรียน ไม่สามารถเริ่มกล้องจาก URL โดยตรงได้','warn');
+})();
+</script>
+</body>
+</html>
