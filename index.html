@@ -11,6 +11,13 @@
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 12% 0,#172c4c 0,transparent 42%),var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
 .wrap{max-width:1160px;margin:auto;padding:18px}.top{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}.title{font-size:clamp(20px,3vw,28px);font-weight:800}.sub{color:var(--muted);font-size:13px}.pill{border:1px solid #24533b;background:#0c2a20;color:var(--green);border-radius:999px;padding:6px 11px;font-size:12px;font-weight:700}
 .grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,.8fr);gap:16px}.panel{background:linear-gradient(145deg,rgba(23,39,62,.97),rgba(16,27,44,.98));border:1px solid var(--line);border-radius:18px;padding:15px;box-shadow:0 18px 45px #0003}.camera{position:relative;overflow:hidden;background:#030712;border:2px solid #334155;border-radius:14px;aspect-ratio:4/3;display:grid;place-items:center}.camera video,.camera canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}.camera canvas{pointer-events:none}.camera-placeholder{padding:22px;text-align:center;color:var(--muted)}.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}.btn,select{border:1px solid #415570;background:#1e3350;color:#f8fbff;border-radius:10px;padding:10px 13px;font:inherit}.btn{cursor:pointer;font-weight:700}.btn.primary{background:#1d4ed8;border-color:#3b82f6}.btn.danger{background:#7f1d1d;border-color:#b91c1c}.btn:disabled{opacity:.5;cursor:not-allowed}.status{margin:0 0 12px;padding:11px 12px;border:1px solid #3a4d65;border-radius:11px;background:#101827;color:#cbd5e1}.status.success{border-color:#166534;background:#052e1a;color:#bbf7d0}.status.warn{border-color:#92400e;background:#422006;color:#fde68a}.status.error{border-color:#991b1b;background:#450a0a;color:#fecaca}.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}.stat{background:#0b1526;border:1px solid #283950;border-radius:12px;padding:11px}.stat b{display:block;font-size:25px}.stat span{font-size:12px;color:var(--muted)}.list{display:grid;gap:7px;max-height:420px;overflow:auto}.student{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 10px;border-radius:10px;background:#0b1526;border:1px solid #283950}.student small{color:var(--muted)}.student .ok{color:var(--green);font-weight:800}.note{margin-top:14px;color:#fcd9a8;background:#3a260f;border:1px solid #80551a;border-radius:12px;padding:12px;font-size:12px}.hidden{display:none!important}.camera-tag{position:absolute;left:10px;top:10px;z-index:2;background:#020617c9;border:1px solid #64748b;color:#e2e8f0;border-radius:8px;padding:5px 8px;font-size:11px}
+.permission-gate{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:18px;background:linear-gradient(145deg,rgba(4,12,25,.97),rgba(15,30,52,.97));text-align:center}
+.permission-card{width:min(100%,480px);padding:22px 20px;border:1px solid #415875;border-radius:18px;background:rgba(13,25,43,.96);box-shadow:0 16px 42px #0008}
+.permission-icon{width:58px;height:58px;margin:0 auto 12px;border-radius:16px;display:grid;place-items:center;background:#17365c;color:#93c5fd;font-size:30px}
+.permission-title{font-size:clamp(18px,2.5vw,23px);font-weight:800;margin-bottom:9px;color:#f8fafc}
+.permission-description{font-size:14px;line-height:1.7;color:#c5d3e5}
+.permission-button{display:block;width:100%;margin-top:18px;padding:13px 16px}
+.permission-footnote{margin-top:10px;font-size:11px;color:#94a3b8}
 @media(max-width:820px){.grid{grid-template-columns:1fr}.wrap{padding:12px}.list{max-height:240px}.panel{padding:12px}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
@@ -24,8 +31,17 @@
       <div class="camera" id="cameraBox">
         <video id="video" autoplay muted playsinline></video>
         <canvas id="overlay"></canvas>
-        <div id="cameraPlaceholder" class="camera-placeholder">ยังไม่ได้เปิดกล้อง<br><small>อนุญาตการใช้งานกล้องเมื่อเบราว์เซอร์ถาม</small></div>
+        <div id="cameraPlaceholder" class="camera-placeholder">กล้องจะเริ่มทำงานหลังจากครูอนุญาตแล้ว</div>
         <span id="cameraTag" class="camera-tag hidden">LIVE · FACE DETECTION</span>
+        <div id="permissionGate" class="permission-gate">
+          <div class="permission-card">
+            <div class="permission-icon"><i>▣</i></div>
+            <div class="permission-title">อนุญาตให้ใช้กล้องก่อนเริ่มสแกน</div>
+            <div class="permission-description">ระบบยังไม่เปิดกล้องในขณะนี้ เมื่อครูพร้อมแล้วให้กดปุ่มด้านล่าง จากนั้นเลือก <b>อนุญาต (Allow)</b> ในหน้าต่างแจ้งเตือนของ Chrome หรือ Edge กล้องจึงจะเริ่มทำงาน</div>
+            <button id="grantCameraBtn" class="btn primary permission-button" type="button" disabled>กำลังเตรียมระบบตรวจใบหน้า...</button>
+            <div class="permission-footnote">กล้องจะไม่ทำงานจนกว่าจะกดปุ่มนี้และอนุญาตจากเบราว์เซอร์</div>
+          </div>
+        </div>
       </div>
       <div class="controls">
         <select id="cameraSelect" aria-label="เลือกกล้อง" disabled><option value="">กล้องเริ่มต้นของอุปกรณ์</option></select>
@@ -59,7 +75,7 @@ const MATCH_MAX_DISTANCE=0.34;
 const MATCH_MIN_MARGIN=0.10;
 const MATCH_REQUIRED_HITS=4;
 const MATCH_MAX_GAP_MS=1600;
-let sessionToken='';let parentOrigin='';let initReceived=false;let faceApi=null;let referenceDescriptors=[];let matchThreshold=MATCH_MAX_DISTANCE;let stream=null;let scanning=false;let processing=false;let loopTimer=null;let matched=new Set();let rosterById=new Map();let candidateState={id:'',hits:0,last:0,distances:[]};let currentDeviceId='';
+let sessionToken='';let parentOrigin='';let initReceived=false;let scannerPrepared=false;let cameraRequestInProgress=false;let faceApi=null;let referenceDescriptors=[];let matchThreshold=MATCH_MAX_DISTANCE;let stream=null;let scanning=false;let processing=false;let loopTimer=null;let matched=new Set();let rosterById=new Map();let candidateState={id:'',hits:0,last:0,distances:[]};let currentDeviceId='';
 
 function setStatus(message,level){const el=$('status');el.textContent=String(message||'');el.className='status'+(level?' '+level:'');}
 function sendParent(type,data){if(!window.opener||window.opener.closed||!parentOrigin||!sessionToken)return;try{window.opener.postMessage(Object.assign({type:type,token:sessionToken},data||{}),parentOrigin);}catch(error){console.warn('postMessage failed',error);}}
@@ -145,26 +161,29 @@ async function enumerateCameras(){
     select.disabled=devices.length<=1;$('switchCameraBtn').disabled=devices.length<=1;
   }catch(error){console.warn('enumerateDevices',error);}
 }
-async function startCamera(deviceId){
+async function startCamera(deviceId,approvedStream){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('เบราว์เซอร์นี้ไม่รองรับกล้อง LIVE กรุณาเปิดผ่าน Chrome/Edge รุ่นปัจจุบันและใช้ HTTPS');
-  stopCamera(false);
+  stopCamera(false,false);
   const videoOptions=deviceId?{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720}}:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}};
-  stream=await navigator.mediaDevices.getUserMedia({audio:false,video:videoOptions});
+  // approvedStream ได้มาจากปุ่มที่ครูกดโดยตรง จึงแสดงหน้าขออนุญาตก่อนเปิดภาพกล้อง
+  stream=approvedStream||await navigator.mediaDevices.getUserMedia({audio:false,video:videoOptions});
   const video=$('video');video.srcObject=stream;await video.play();
   const track=stream.getVideoTracks()[0];currentDeviceId=track&&track.getSettings?String(track.getSettings().deviceId||deviceId||''):String(deviceId||'');
-  $('cameraPlaceholder').classList.add('hidden');$('cameraTag').classList.remove('hidden');
+  $('cameraPlaceholder').classList.add('hidden');$('permissionGate').classList.add('hidden');$('cameraTag').classList.remove('hidden');
   await enumerateCameras();
   scanning=true;processing=false;$('stopBtn').disabled=false;setStatus('กล้อง LIVE ทำงานแล้ว · กำลังตรวจใบหน้าอย่างต่อเนื่อง','success');
   sendParent('SCHOOL_FACE_STATUS',{message:'กล้อง LIVE ทำงานแล้ว กำลังตรวจใบหน้าอย่างต่อเนื่อง','level':'success'});
   scheduleDetection(350);
 }
-function stopCamera(notify){
+function stopCamera(notify,showPermissionGate){
+  if(showPermissionGate===undefined)showPermissionGate=true;
   scanning=false;processing=false;if(loopTimer){clearTimeout(loopTimer);loopTimer=null;}
   if(stream){stream.getTracks().forEach(track=>{try{track.stop();}catch(ignored){}});stream=null;}
   const video=$('video');if(video){try{video.pause();}catch(ignored){}video.srcObject=null;}
   const canvas=$('overlay');if(canvas){const ctx=canvas.getContext('2d');if(ctx)ctx.clearRect(0,0,canvas.width,canvas.height);}
   $('cameraPlaceholder').classList.remove('hidden');$('cameraTag').classList.add('hidden');
   $('stopBtn').disabled=true;
+  if(scannerPrepared&&showPermissionGate){$('permissionGate').classList.remove('hidden');$('grantCameraBtn').disabled=cameraRequestInProgress;$('grantCameraBtn').textContent='อนุญาตและเปิดกล้อง';}
   if(notify){sendParent('SCHOOL_FACE_STOPPED',{});}
 }
 function drawBoxes(detections){
@@ -238,16 +257,43 @@ async function initialize(data){
   if(initReceived)return;initReceived=true;sessionToken=String(data.token||'');
   if(!sessionToken)throw new Error('ไม่พบรหัสเชื่อมต่อจากระบบหลัก');
   matched=new Set();rosterById=new Map();referenceDescriptors=[];resetCandidate();$('matchedCount').textContent='0';$('recognizedList').innerHTML='';
-  $('livePill').textContent='กำลังเตรียมระบบ';$('stopBtn').disabled=true;
-  setStatus('ได้รับข้อมูลจากบัญชีครูแล้ว กำลังเตรียมระบบตรวจใบหน้า...','');
+  $('livePill').textContent='กำลังเตรียมระบบ';$('stopBtn').disabled=true;$('switchCameraBtn').disabled=true;
+  $('grantCameraBtn').disabled=true;$('grantCameraBtn').textContent='กำลังเตรียมระบบตรวจใบหน้า...';
+  $('permissionGate').classList.remove('hidden');
+  setStatus('ได้รับข้อมูลจากบัญชีครูแล้ว กำลังเตรียมข้อมูลและโมเดลตรวจใบหน้า · ยังไม่เปิดกล้อง','');
   await buildMatcher(data);
-  setStatus('เตรียมรูปอ้างอิงเสร็จแล้ว กำลังขออนุญาตใช้กล้อง...','');
-  try{await startCamera('');}
-  catch(error){
-    const message=/NotAllowedError|Permission denied|denied/i.test(String(error&&error.name||'')+' '+String(error&&error.message||''))?'ไม่ได้รับอนุญาตให้ใช้กล้อง กรุณากดไอคอนกล้องในแถบที่อยู่และเลือก Allow':String(error&&error.message||error);
-    $('livePill').textContent='ต้องตรวจสอบกล้อง';setStatus(message,'error');sendParent('SCHOOL_FACE_ERROR',{message:message});throw error;
+  scannerPrepared=true;
+  $('livePill').textContent='รออนุญาตใช้กล้อง';
+  $('grantCameraBtn').disabled=false;$('grantCameraBtn').textContent='อนุญาตและเปิดกล้อง';
+  setStatus('เตรียมรายชื่อนักเรียนเรียบร้อยแล้ว · กด “อนุญาตและเปิดกล้อง” แล้วเลือก Allow ในเบราว์เซอร์เพื่อเริ่มสแกน','success');
+  sendParent('SCHOOL_FACE_STATUS',{message:'เตรียมรายชื่อนักเรียนเรียบร้อยแล้ว · รอครูกดอนุญาตใช้กล้องในหน้าต่าง LIVE','level':'success'});
+}
+
+async function requestCameraPermission(){
+  if(!scannerPrepared||cameraRequestInProgress)return;
+  const button=$('grantCameraBtn');cameraRequestInProgress=true;button.disabled=true;button.textContent='กำลังรอการอนุญาตจากเบราว์เซอร์...';
+  $('livePill').textContent='กำลังขออนุญาตกล้อง';
+  setStatus('กรุณากด “อนุญาต (Allow)” ในหน้าต่างแจ้งเตือนของ Chrome หรือ Edge · ภาพกล้องจะเริ่มหลังจากอนุญาตแล้วเท่านั้น','warn');
+  let requestedStream=null;
+  try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('อุปกรณ์หรือเบราว์เซอร์นี้ไม่รองรับกล้อง กรุณาใช้ Chrome/Edge และเปิดเว็บไซต์ผ่าน HTTPS');
+    // เรียก getUserMedia จากการคลิกปุ่มของครูโดยตรง เพื่อให้หน้าต่างขออนุญาตแสดงอยู่ด้านหน้า
+    requestedStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}}});
+    await startCamera('',requestedStream);requestedStream=null;
+    $('livePill').textContent='กล้อง LIVE ทำงาน';
+  }catch(error){
+    if(requestedStream){requestedStream.getTracks().forEach(track=>{try{track.stop();}catch(ignored){}});}
+    stopCamera(false);
+    const name=String(error&&error.name||'');let message=String(error&&error.message||error);
+    if(name==='NotAllowedError'||name==='PermissionDeniedError'||name==='SecurityError')message='ยังไม่ได้รับอนุญาตให้ใช้กล้อง · กรุณากดอนุญาต (Allow) ที่แถบที่อยู่ของเบราว์เซอร์ แล้วกด “อนุญาตและเปิดกล้อง” อีกครั้ง';
+    else if(name==='NotFoundError'||name==='DevicesNotFoundError')message='ไม่พบกล้องในอุปกรณ์นี้ กรุณาตรวจสอบว่ามีกล้องและเชื่อมต่อเรียบร้อยแล้ว';
+    else if(name==='NotReadableError'||name==='TrackStartError')message='ไม่สามารถเปิดกล้องได้ เนื่องจากกล้องอาจกำลังถูกใช้งานโดยโปรแกรมอื่น กรุณาปิดโปรแกรมนั้นแล้วลองใหม่';
+    $('livePill').textContent='รออนุญาตใช้กล้อง';setStatus(message,'error');
+    sendParent('SCHOOL_FACE_STATUS',{message:message,level:'error'});
+  }finally{
+    cameraRequestInProgress=false;
+    if(!scanning){button.disabled=false;button.textContent='อนุญาตและเปิดกล้อง';}
   }
-  $('livePill').textContent='กล้อง LIVE ทำงาน';$('stopBtn').disabled=false;$('switchCameraBtn').disabled=false;
 }
 
 window.addEventListener('message',event=>{
@@ -261,9 +307,10 @@ window.addEventListener('message',event=>{
   }
 });
 
-$('stopBtn').addEventListener('click',()=>{stopCamera(true);$('livePill').textContent='หยุดกล้องแล้ว';setStatus('หยุดกล้องแล้ว สามารถปิดหน้าต่างนี้ได้','warn');});
-$('switchCameraBtn').addEventListener('click',async()=>{const next=$('cameraSelect').value;try{await startCamera(next);}catch(error){setStatus('เปลี่ยนกล้องไม่สำเร็จ: '+String(error&&error.message||error),'error');}});
-$('cameraSelect').addEventListener('change',async()=>{const next=$('cameraSelect').value;if(!next)return;try{await startCamera(next);}catch(error){setStatus('เปิดกล้องที่เลือกไม่สำเร็จ: '+String(error&&error.message||error),'error');}});
+$('grantCameraBtn').addEventListener('click',requestCameraPermission);
+$('stopBtn').addEventListener('click',()=>{stopCamera(true);$('livePill').textContent='รออนุญาตใช้กล้อง';setStatus('หยุดกล้องแล้ว · กด “อนุญาตและเปิดกล้อง” เมื่อต้องการเริ่มใหม่','warn');});
+$('switchCameraBtn').addEventListener('click',async()=>{const next=$('cameraSelect').value;try{await startCamera(next);}catch(error){stopCamera(false,true);setStatus('เปลี่ยนกล้องไม่สำเร็จ: '+String(error&&error.message||error),'error');}});
+$('cameraSelect').addEventListener('change',async()=>{const next=$('cameraSelect').value;if(!next)return;try{await startCamera(next);}catch(error){stopCamera(false,true);setStatus('เปิดกล้องที่เลือกไม่สำเร็จ: '+String(error&&error.message||error),'error');}});
 window.addEventListener('beforeunload',()=>{stopCamera(false);sendParent('SCHOOL_FACE_STOPPED',{});});
 
 // แจ้ง READY ซ้ำจนกว่าหน้าระบบหลักจะส่งชุดข้อมูลมา เพื่อรองรับการโหลดหน้า/โมเดลที่ใช้เวลานาน
