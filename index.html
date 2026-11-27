@@ -55,7 +55,11 @@ const MODEL_URLS=[
   'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights'
 ];
 const $=id=>document.getElementById(id);
-let sessionToken='';let parentOrigin='';let initReceived=false;let faceApi=null;let matcher=null;let stream=null;let scanning=false;let processing=false;let loopTimer=null;let matched=new Set();let rosterById=new Map();let candidateHits=new Map();let currentDeviceId='';
+const MATCH_MAX_DISTANCE=0.34;
+const MATCH_MIN_MARGIN=0.10;
+const MATCH_REQUIRED_HITS=4;
+const MATCH_MAX_GAP_MS=1600;
+let sessionToken='';let parentOrigin='';let initReceived=false;let faceApi=null;let referenceDescriptors=[];let matchThreshold=MATCH_MAX_DISTANCE;let stream=null;let scanning=false;let processing=false;let loopTimer=null;let matched=new Set();let rosterById=new Map();let candidateState={id:'',hits:0,last:0,distances:[]};let currentDeviceId='';
 
 function setStatus(message,level){const el=$('status');el.textContent=String(message||'');el.className='status'+(level?' '+level:'');}
 function sendParent(type,data){if(!window.opener||window.opener.closed||!parentOrigin||!sessionToken)return;try{window.opener.postMessage(Object.assign({type:type,token:sessionToken},data||{}),parentOrigin);}catch(error){console.warn('postMessage failed',error);}}
@@ -91,21 +95,45 @@ async function loadModels(api){
 function imageFromData(item){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('อ่านรูปอ้างอิงไม่สำเร็จ'));img.src='data:'+(item.MimeType||'image/jpeg')+';base64,'+String(item.ImageData||'');});}
 async function buildMatcher(data){
   faceApi=await loadFaceApi();setStatus('กำลังโหลดโมเดลตรวจจับใบหน้า...','');await loadModels(faceApi);
-  const students=Array.isArray(data.students)?data.students:[];const labeled=[];let failed=0;
+  const students=Array.isArray(data.students)?data.students:[];const references=[];let failed=0;const seenIds=new Set();
+  // บังคับใช้เกณฑ์ในหน้านี้เอง ไม่ให้ค่าจากหน้าหลักผ่อนเกณฑ์ให้กว้างกว่า 0.34
+  const requested=Number(data.threshold);
+  matchThreshold=Number.isFinite(requested)&&requested>0?Math.min(MATCH_MAX_DISTANCE,requested):MATCH_MAX_DISTANCE;
   for(let i=0;i<students.length;i++){
-    const item=students[i];setStatus('กำลังวิเคราะห์รูปอ้างอิง '+(i+1)+' / '+students.length+' คน...','');
+    const item=students[i];const id=String(item.StudentID||'').trim();
+    if(!id||seenIds.has(id)){failed++;continue;}seenIds.add(id);
+    setStatus('กำลังวิเคราะห์รูปอ้างอิง '+(i+1)+' / '+students.length+' คน...','');
     try{
       const img=await imageFromData(item);
-      const result=await faceApi.detectSingleFace(img,new faceApi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:0.2})).withFaceLandmarks(true).withFaceDescriptor();
-      if(result&&result.descriptor){const id=String(item.StudentID||'');labeled.push(new faceApi.LabeledFaceDescriptors(id,[result.descriptor]));rosterById.set(id,{StudentID:id,FullName:String(item.FullName||id),Number:String(item.Number||'')});}
-      else failed++;
+      const found=await faceApi.detectAllFaces(img,new faceApi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:0.25})).withFaceLandmarks(true).withFaceDescriptors();
+      // รูปอ้างอิงต้องมีใบหน้าเดียวเท่านั้น ป้องกันรูปหมู่/รูปที่เลือกใบหน้าผิดคน
+      if(found.length!==1||!found[0].descriptor||Number(found[0].detection.score||0)<0.60||found[0].detection.box.width<55||found[0].detection.box.height<55){failed++;continue;}
+      references.push({id:id,descriptor:found[0].descriptor});
+      rosterById.set(id,{StudentID:id,FullName:String(item.FullName||id),Number:String(item.Number||'')});
     }catch(error){failed++;}
   }
-  if(!labeled.length)throw new Error('ไม่พบใบหน้าในรูปอ้างอิง กรุณาตรวจสอบรูปนักเรียนให้เห็นใบหน้าชัดเจน');
-  matcher=new faceApi.FaceMatcher(labeled,Number(data.threshold)||0.48);
-  $('referenceCount').textContent=String(labeled.length);
+  if(!references.length)throw new Error('ไม่พบรูปอ้างอิงที่มีใบหน้าชัดเจนและมีใบหน้าเพียงคนเดียว กรุณาตรวจสอบรูปนักเรียนในทะเบียน');
+
+  // หากรูปของนักเรียนต่างรหัสให้ descriptor เกือบเหมือนกันมาก ให้พักทั้งคู่ไว้ก่อน
+  // ป้องกันรูปซ้ำในทะเบียนทำให้คนหนึ่งถูกระบุเป็นนักเรียนอีกคน
+  const duplicated=new Set();
+  for(let i=0;i<references.length;i++){
+    for(let j=i+1;j<references.length;j++){
+      if(faceApi.euclideanDistance(references[i].descriptor,references[j].descriptor)<=0.20){
+        duplicated.add(references[i].id);duplicated.add(references[j].id);
+      }
+    }
+  }
+  referenceDescriptors=references.filter(ref=>!duplicated.has(ref.id));
+  duplicated.forEach(id=>rosterById.delete(id));
+  if(!referenceDescriptors.length)throw new Error('รูปอ้างอิงซ้ำหรือคล้ายกันมากจนแยกนักเรียนไม่ได้ กรุณาตรวจสอบรูปประจำตัวในทะเบียน');
+  $('referenceCount').textContent=String(referenceDescriptors.length);
   $('classLabel').textContent=String(data.classLabel||'');
-  if(failed)sendParent('SCHOOL_FACE_STATUS',{message:'เตรียมรูปอ้างอิงได้ '+labeled.length+' คน ข้ามรูปที่ไม่ชัด '+failed+' รูป','level':'warn'});
+  let warning=[];
+  if(failed)warning.push('ข้ามรูปที่ไม่ชัด/ไม่ใช่รูปเดี่ยว '+failed+' รูป');
+  if(duplicated.size)warning.push('พักรูปที่ตรวจพบว่าซ้ำกัน '+duplicated.size+' รูป');
+  if(warning.length)sendParent('SCHOOL_FACE_STATUS',{message:'เตรียมรูปที่ใช้ได้ '+referenceDescriptors.length+' คน · '+warning.join(' · '),'level':'warn'});
+  sendParent('SCHOOL_FACE_STATUS',{message:'เตรียมรูปอ้างอิง '+referenceDescriptors.length+' คนแล้ว · ใช้เกณฑ์เข้มงวดและยืนยันซ้ำ 4 เฟรม','level':'success'});
 }
 
 async function enumerateCameras(){
@@ -144,53 +172,72 @@ function drawBoxes(detections){
   if(canvas.width!==video.videoWidth||canvas.height!==video.videoHeight){canvas.width=video.videoWidth;canvas.height=video.videoHeight;}
   const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
   detections.forEach(item=>{
-    const box=item.detection.box;const student=item.student;const color=student?'#4ade80':'#fbbf24';
+    const box=item.detection.box;const student=item.student;const color=student?'#4ade80':(item.candidate?'#fbbf24':'#f87171');
     ctx.strokeStyle=color;ctx.lineWidth=Math.max(3,canvas.width/360);ctx.strokeRect(box.x,box.y,box.width,box.height);
-    const label=student?student.FullName:(item.candidate?'กำลังตรวจสอบ':'ไม่พบในทะเบียน');
+    const label=student?student.FullName:(item.label|| (item.candidate?'กำลังตรวจสอบ':'ไม่พบในชั้นนี้'));
     ctx.font='bold '+Math.max(15,canvas.width/55)+'px system-ui';const textWidth=ctx.measureText(label).width;
-    const top=Math.max(0,box.y-Math.max(27,canvas.width/28));ctx.fillStyle=color;ctx.fillRect(box.x,top,Math.min(textWidth+16,box.width+80),Math.max(27,canvas.width/28));
+    const top=Math.max(0,box.y-Math.max(27,canvas.width/28));ctx.fillStyle=color;ctx.fillRect(box.x,top,Math.min(textWidth+16,box.width+100),Math.max(27,canvas.width/28));
     ctx.fillStyle='#07111f';ctx.fillText(label,box.x+8,top+Math.max(18,canvas.width/48));
   });
 }
-function addRecognized(studentId,distance){
+function resetCandidate(){candidateState={id:'',hits:0,last:0,distances:[]};}
+function findBestStudentMatch(descriptor){
+  const ranked=referenceDescriptors.map(ref=>({id:ref.id,distance:faceApi.euclideanDistance(descriptor,ref.descriptor)})).sort((a,b)=>a.distance-b.distance);
+  if(!ranked.length)return null;
+  const best=ranked[0];const second=ranked.length>1?ranked[1]:null;
+  const margin=second?second.distance-best.distance:1;
+  if(best.distance>matchThreshold||margin<MATCH_MIN_MARGIN)return null;
+  return {id:best.id,distance:best.distance,margin:margin};
+}
+function addRecognized(studentId,distance,margin,hits){
   if(matched.has(studentId))return;
-  matched.add(studentId);const student=rosterById.get(studentId);if(!student)return;
+  const student=rosterById.get(studentId);if(!student)return;
+  matched.add(studentId);
   const row=document.createElement('div');row.className='student';
   const name=document.createElement('span');name.textContent=student.FullName;
-  const status=document.createElement('span');status.className='ok';status.textContent='มาเรียนแล้ว';
+  const status=document.createElement('span');status.className='ok';status.textContent='ยืนยันแล้ว';
   row.append(name,status);$('recognizedList').prepend(row);
   $('matchedCount').textContent=String(matched.size);
-  sendParent('SCHOOL_FACE_MATCH',{matches:[{StudentID:studentId,FullName:student.FullName,Distance:Number(distance||0)}]});
+  sendParent('SCHOOL_FACE_MATCH',{matches:[{StudentID:studentId,FullName:student.FullName,Distance:Number(distance),Margin:Number(margin),ConsecutiveHits:Number(hits)}]});
   setStatus('ยืนยันใบหน้าตรงกับทะเบียน: '+student.FullName,'success');
 }
 async function detectionTick(){
   if(!scanning||processing)return;
-  const video=$('video');if(!video||video.readyState<2||!matcher){scheduleDetection(500);return;}
+  const video=$('video');if(!video||video.readyState<2||!referenceDescriptors.length){scheduleDetection(500);return;}
   processing=true;
   try{
-    const detections=await faceApi.detectAllFaces(video,new faceApi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:0.42})).withFaceLandmarks(true).withFaceDescriptors();
-    const now=Date.now();const seenThisFrame=new Set();const drawItems=[];
-    detections.forEach(detection=>{
-      const best=matcher.findBestMatch(detection.descriptor);
-      if(best&&best.label!=='unknown'&&Number(best.distance)<=0.48){
-        const id=String(best.label);seenThisFrame.add(id);let progress=candidateHits.get(id)||{hits:0,last:0};
-        progress.hits=(now-progress.last<=1800)?progress.hits+1:1;progress.last=now;candidateHits.set(id,progress);
-        const student=rosterById.get(id);drawItems.push({detection,student:matched.has(id)?student:null,candidate:!matched.has(id)});
-        if(progress.hits>=2&&!matched.has(id))addRecognized(id,best.distance);
-      }else{drawItems.push({detection,student:null,candidate:false});}
-    });
-    for(const [id,progress] of candidateHits.entries()){if(now-progress.last>2200)candidateHits.delete(id);}
-    drawBoxes(drawItems);
-    if(!detections.length){setStatus('กล้อง LIVE พร้อมใช้งาน · ยังไม่พบใบหน้าในกรอบ','');}
-  }catch(error){console.warn('Face detection loop',error);setStatus('ตรวจจับภาพไม่สำเร็จ: '+String(error&&error.message||error),'warn');}
-  finally{processing=false;if(scanning)scheduleDetection(850);}
+    const detections=await faceApi.detectAllFaces(video,new faceApi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:0.55})).withFaceLandmarks(true).withFaceDescriptors();
+    const now=Date.now();
+    if(!detections.length){resetCandidate();drawBoxes([]);setStatus('กล้อง LIVE พร้อมใช้งาน · ยังไม่พบใบหน้าในกรอบ','');return;}
+    // โหมดเช็คชื่อกำหนดให้มีใบหน้าเพียงคนเดียวต่อครั้ง ป้องกันการจับสลับคน/สลับรหัสในเฟรมเดียวกัน
+    if(detections.length!==1){resetCandidate();drawBoxes(detections.map(d=>({detection:d,label:'กรุณาให้เข้ากล้องทีละคน'})));setStatus('พบมากกว่า 1 ใบหน้า · กรุณาให้เข้ากล้องทีละคนเพื่อป้องกันการเช็คชื่อผิด','warn');return;}
+    const detection=detections[0];const box=detection.detection.box;const score=Number(detection.detection.score||0);
+    if(score<0.68||box.width<100||box.height<100){resetCandidate();drawBoxes([{detection,label:'ขยับเข้าใกล้กล้องและจัดแสงให้สว่าง'}]);setStatus('ภาพใบหน้ายังไม่ชัดหรืออยู่ไกลเกินไป · กรุณาขยับเข้าใกล้กล้อง','warn');return;}
+    const best=findBestStudentMatch(detection.descriptor);
+    if(!best){resetCandidate();drawBoxes([{detection,label:'ไม่พบนักเรียนในชั้นนี้'}]);setStatus('ตรวจพบใบหน้า แต่ไม่พบข้อมูลที่ตรงกับนักเรียนในชั้นนี้','warn');return;}
+
+    const sameCandidate=candidateState.id===best.id&&(now-candidateState.last)<=MATCH_MAX_GAP_MS;
+    if(sameCandidate){candidateState.hits++;candidateState.last=now;candidateState.distances.push(best.distance);if(candidateState.distances.length>MATCH_REQUIRED_HITS)candidateState.distances.shift();}
+    else{candidateState={id:best.id,hits:1,last:now,distances:[best.distance]};}
+    const meanDistance=candidateState.distances.reduce((sum,value)=>sum+value,0)/candidateState.distances.length;
+    const student=rosterById.get(best.id);
+    if(candidateState.hits>=MATCH_REQUIRED_HITS&&candidateState.distances.length>=MATCH_REQUIRED_HITS&&meanDistance<=matchThreshold-0.01){
+      addRecognized(best.id,meanDistance,best.margin,candidateState.hits);
+      drawBoxes([{detection,student:student,candidate:false}]);resetCandidate();
+    }else{
+      drawBoxes([{detection,label:'กำลังตรวจสอบความตรงกัน '+candidateState.hits+'/'+MATCH_REQUIRED_HITS+' เฟรม',candidate:true}]);
+      setStatus('พบใบหน้าที่อาจตรงกับทะเบียน · กำลังยืนยันซ้ำ '+candidateState.hits+'/'+MATCH_REQUIRED_HITS+' เฟรม · ยังไม่บันทึกชื่อ','');
+    }
+  }catch(error){resetCandidate();console.warn('Face detection loop',error);setStatus('ตรวจจับภาพไม่สำเร็จ: '+String(error&&error.message||error),'warn');}
+  finally{processing=false;if(scanning)scheduleDetection(800);}
 }
+
 function scheduleDetection(delay){if(loopTimer)clearTimeout(loopTimer);if(scanning)loopTimer=setTimeout(detectionTick,delay||850);}
 
 async function initialize(data){
   if(initReceived)return;initReceived=true;sessionToken=String(data.token||'');
   if(!sessionToken)throw new Error('ไม่พบรหัสเชื่อมต่อจากระบบหลัก');
-  matched=new Set();rosterById=new Map();candidateHits=new Map();$('matchedCount').textContent='0';$('recognizedList').innerHTML='';
+  matched=new Set();rosterById=new Map();referenceDescriptors=[];resetCandidate();$('matchedCount').textContent='0';$('recognizedList').innerHTML='';
   $('livePill').textContent='กำลังเตรียมระบบ';$('stopBtn').disabled=true;
   setStatus('ได้รับข้อมูลจากบัญชีครูแล้ว กำลังเตรียมระบบตรวจใบหน้า...','');
   await buildMatcher(data);
