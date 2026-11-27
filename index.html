@@ -75,7 +75,7 @@ const MATCH_MAX_DISTANCE=0.34;
 const MATCH_MIN_MARGIN=0.10;
 const MATCH_REQUIRED_HITS=4;
 const MATCH_MAX_GAP_MS=1600;
-let sessionToken='';let parentOrigin='';let initReceived=false;let scannerPrepared=false;let cameraRequestInProgress=false;let faceApi=null;let referenceDescriptors=[];let matchThreshold=MATCH_MAX_DISTANCE;let stream=null;let scanning=false;let processing=false;let loopTimer=null;let matched=new Set();let rosterById=new Map();let candidateState={id:'',hits:0,last:0,distances:[]};let currentDeviceId='';
+let sessionToken='';let parentOrigin='';let initReceived=false;let scannerPrepared=false;let cameraRequestInProgress=false;let voiceEnabled=true;let faceApi=null;let referenceDescriptors=[];let matchThreshold=MATCH_MAX_DISTANCE;let stream=null;let scanning=false;let processing=false;let loopTimer=null;let matched=new Set();let rosterById=new Map();let candidateState={id:'',hits:0,last:0,distances:[]};let currentDeviceId='';
 
 function setStatus(message,level){const el=$('status');el.textContent=String(message||'');el.className='status'+(level?' '+level:'');}
 function sendParent(type,data){if(!window.opener||window.opener.closed||!parentOrigin||!sessionToken)return;try{window.opener.postMessage(Object.assign({type:type,token:sessionToken},data||{}),parentOrigin);}catch(error){console.warn('postMessage failed',error);}}
@@ -208,6 +208,38 @@ function findBestStudentMatch(descriptor){
   if(best.distance>matchThreshold||margin<MATCH_MIN_MARGIN)return null;
   return {id:best.id,distance:best.distance,margin:margin};
 }
+function speakStudentName(student){
+  if(!voiceEnabled)return;
+  if(!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance==='undefined'){
+    sendParent('SCHOOL_FACE_STATUS',{message:'เบราว์เซอร์นี้ไม่รองรับเสียงอ่านชื่อ กรุณาใช้ Chrome หรือ Edge รุ่นปัจจุบัน','level':'warn'});
+    return;
+  }
+  const fullName=String(student&&student.FullName||'').trim();
+  if(!fullName)return;
+  const phrase=/^(เด็กหญิง|เด็กชาย|ด\.ญ\.?|ด\.ช\.?)/.test(fullName)?fullName+' มาเรียน':'นักเรียน '+fullName+' มาเรียน';
+  const synth=window.speechSynthesis;
+  let attempts=0;
+  const speakWhenReady=()=>{
+    attempts++;
+    const voices=synth.getVoices();
+    if(!voices.length&&attempts<6){setTimeout(speakWhenReady,250);return;}
+    try{
+      const utterance=new SpeechSynthesisUtterance(phrase);
+      utterance.lang='th-TH';utterance.rate=0.88;utterance.pitch=1;utterance.volume=1;
+      const thaiVoice=voices.find(voice=>/^th([-_]|$)/i.test(String(voice.lang||'')));
+      if(thaiVoice)utterance.voice=thaiVoice;
+      utterance.onerror=event=>{
+        sendParent('SCHOOL_FACE_STATUS',{message:'อ่านชื่อด้วยเสียงไม่สำเร็จ ('+String(event&&event.error||'ไม่ทราบสาเหตุ')+') · ตรวจสอบเสียงภาษาไทยใน Windows/Chrome','level':'warn'});
+      };
+      synth.resume();
+      synth.speak(utterance);
+    }catch(error){
+      console.warn('Speech synthesis failed',error);
+      sendParent('SCHOOL_FACE_STATUS',{message:'ไม่สามารถเล่นเสียงอ่านชื่อได้: '+String(error&&error.message||error),'level':'warn'});
+    }
+  };
+  speakWhenReady();
+}
 function addRecognized(studentId,distance,margin,hits){
   if(matched.has(studentId))return;
   const student=rosterById.get(studentId);if(!student)return;
@@ -217,6 +249,7 @@ function addRecognized(studentId,distance,margin,hits){
   const status=document.createElement('span');status.className='ok';status.textContent='ยืนยันแล้ว';
   row.append(name,status);$('recognizedList').prepend(row);
   $('matchedCount').textContent=String(matched.size);
+  speakStudentName(student);
   sendParent('SCHOOL_FACE_MATCH',{matches:[{StudentID:studentId,FullName:student.FullName,Distance:Number(distance),Margin:Number(margin),ConsecutiveHits:Number(hits)}]});
   setStatus('ยืนยันใบหน้าตรงกับทะเบียน: '+student.FullName,'success');
 }
@@ -256,6 +289,8 @@ function scheduleDetection(delay){if(loopTimer)clearTimeout(loopTimer);if(scanni
 async function initialize(data){
   if(initReceived)return;initReceived=true;sessionToken=String(data.token||'');
   if(!sessionToken)throw new Error('ไม่พบรหัสเชื่อมต่อจากระบบหลัก');
+  voiceEnabled=data.voiceEnabled!==false;
+  if('speechSynthesis' in window){try{window.speechSynthesis.getVoices();}catch(ignored){}}
   matched=new Set();rosterById=new Map();referenceDescriptors=[];resetCandidate();$('matchedCount').textContent='0';$('recognizedList').innerHTML='';
   $('livePill').textContent='กำลังเตรียมระบบ';$('stopBtn').disabled=true;$('switchCameraBtn').disabled=true;
   $('grantCameraBtn').disabled=true;$('grantCameraBtn').textContent='กำลังเตรียมระบบตรวจใบหน้า...';
