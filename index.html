@@ -191,11 +191,23 @@ function drawBoxes(detections){
   if(canvas.width!==video.videoWidth||canvas.height!==video.videoHeight){canvas.width=video.videoWidth;canvas.height=video.videoHeight;}
   const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
   detections.forEach(item=>{
-    const box=item.detection.box;const student=item.student;const color=student?'#4ade80':(item.candidate?'#fbbf24':'#f87171');
-    ctx.strokeStyle=color;ctx.lineWidth=Math.max(3,canvas.width/360);ctx.strokeRect(box.x,box.y,box.width,box.height);
-    const label=student?student.FullName:(item.label|| (item.candidate?'กำลังตรวจสอบ':'ไม่พบในชั้นนี้'));
+    const box=item.detection.box,student=item.student,color=student?'#4ade80':(item.candidate?'#fbbf24':'#f87171');
+    const lw=Math.max(3,canvas.width/360),corner=Math.min(box.width,box.height)*0.22;
+    ctx.save();ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.shadowColor=color;ctx.shadowBlur=12;
+    ctx.beginPath();
+    ctx.moveTo(box.x+corner,box.y);ctx.lineTo(box.x,box.y);ctx.lineTo(box.x,box.y+corner);
+    ctx.moveTo(box.x+box.width-corner,box.y);ctx.lineTo(box.x+box.width,box.y);ctx.lineTo(box.x+box.width,box.y+corner);
+    ctx.moveTo(box.x,box.y+box.height-corner);ctx.lineTo(box.x,box.y+box.height);ctx.lineTo(box.x+corner,box.y+box.height);
+    ctx.moveTo(box.x+box.width-corner,box.y+box.height);ctx.lineTo(box.x+box.width,box.y+box.height);ctx.lineTo(box.x+box.width,box.y+box.height-corner);
+    ctx.stroke();ctx.shadowBlur=0;
+    ctx.lineWidth=Math.max(1,canvas.width/900);ctx.globalAlpha=.65;ctx.strokeRect(box.x,box.y,box.width,box.height);ctx.globalAlpha=1;
+    const cx=box.x+box.width/2,cy=box.y+box.height/2,rad=Math.max(4,canvas.width/100);
+    ctx.beginPath();ctx.arc(cx,cy,rad,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.moveTo(cx-rad*1.8,cy);ctx.lineTo(cx+rad*1.8,cy);ctx.moveTo(cx,cy-rad*1.8);ctx.lineTo(cx,cy+rad*1.8);ctx.stroke();ctx.restore();
+    const label=student?student.FullName:(item.label||(item.candidate?'กำลังตรวจสอบ':'ไม่พบในชั้นนี้'));
     ctx.font='bold '+Math.max(15,canvas.width/55)+'px system-ui';const textWidth=ctx.measureText(label).width;
-    const top=Math.max(0,box.y-Math.max(27,canvas.width/28));ctx.fillStyle=color;ctx.fillRect(box.x,top,Math.min(textWidth+16,box.width+100),Math.max(27,canvas.width/28));
+    const tagH=Math.max(27,canvas.width/28),tagW=Math.min(textWidth+20,box.width+100),top=Math.max(0,box.y-tagH-5);
+    ctx.fillStyle=color;const x=box.x,y=top,r=Math.min(7,tagH/4);
+    ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+tagW-r,y);ctx.quadraticCurveTo(x+tagW,y,x+tagW,y+r);ctx.lineTo(x+tagW,y+tagH-r);ctx.quadraticCurveTo(x+tagW,y+tagH,x+tagW-r,y+tagH);ctx.lineTo(x+r,y+tagH);ctx.quadraticCurveTo(x,y+tagH,x,y+tagH-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();ctx.fill();
     ctx.fillStyle='#07111f';ctx.fillText(label,box.x+8,top+Math.max(18,canvas.width/48));
   });
 }
